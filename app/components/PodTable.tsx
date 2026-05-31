@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchPodLogs } from "../lib/actions";
-import type { PodInfo } from "../lib/k8s";
+import { fetchPodLogs, fetchPodEvents } from "../lib/actions";
+import type { PodInfo, EventInfo } from "../lib/k8s";
 
 function phaseStyles(phase: string): string {
   switch (phase) {
@@ -74,15 +74,39 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
     setSelected(null);
   }
 
-  // Close the dialog on Escape.
+  // Events dialog state.
+  const [eventsPod, setEventsPod] = useState<PodInfo | null>(null);
+  const [events, setEvents] = useState<EventInfo[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  function openEvents(pod: PodInfo) {
+    setEventsPod(pod);
+    setEvents([]);
+    setEventsError(null);
+    setEventsLoading(true);
+
+    fetchPodEvents(pod.namespace, pod.name)
+      .then((list) => setEvents(list))
+      .catch((e) => setEventsError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setEventsLoading(false));
+  }
+
+  function closeEvents() {
+    setEventsPod(null);
+  }
+
+  // Close whichever dialog is open on Escape.
   useEffect(() => {
-    if (!selected) return;
+    if (!selected && !eventsPod) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") close();
+      if (e.key !== "Escape") return;
+      closeEvents();
+      close();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
+  }, [selected, eventsPod]);
 
   return (
     <>
@@ -142,15 +166,22 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                        pod.eventCount > 0
-                          ? "bg-indigo-500/10 text-indigo-300 ring-indigo-500/30"
-                          : "bg-zinc-700/30 text-zinc-500 ring-zinc-600/30"
-                      }`}
-                    >
-                      {pod.eventCount}
-                    </span>
+                    {pod.eventCount > 0 ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEvents(pod);
+                        }}
+                        title="View events"
+                        className="inline-flex min-w-6 items-center justify-center rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-300 ring-1 ring-inset ring-indigo-500/30 transition-colors hover:bg-indigo-500/20 hover:text-indigo-200"
+                      >
+                        {pod.eventCount}
+                      </button>
+                    ) : (
+                      <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-zinc-700/30 px-2 py-0.5 text-xs font-medium text-zinc-500 ring-1 ring-inset ring-zinc-600/30">
+                        {pod.eventCount}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3 text-zinc-400">{pod.node}</td>
                   <td className="px-5 py-3 text-zinc-400">
@@ -254,6 +285,112 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
                 <pre className="whitespace-pre-wrap break-words p-5 font-mono text-xs leading-relaxed text-zinc-300">
                   {logs}
                 </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {eventsPod && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={closeEvents}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Events for ${eventsPod.name}`}
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/60"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="truncate font-mono text-sm font-semibold text-zinc-100">
+                  {eventsPod.name}
+                </h2>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  {eventsPod.namespace} · events
+                </p>
+              </div>
+              <button
+                onClick={closeEvents}
+                aria-label="Close"
+                className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              {eventsLoading ? (
+                <div className="flex h-40 items-center justify-center gap-3 text-sm text-zinc-500">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+                  Loading events…
+                </div>
+              ) : eventsError ? (
+                <div className="p-5 text-sm text-rose-400">
+                  <p className="font-medium text-rose-300">
+                    Could not load events
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-rose-400/80">
+                    {eventsError}
+                  </p>
+                </div>
+              ) : events.length === 0 ? (
+                <div className="flex h-40 items-center justify-center text-sm text-zinc-600">
+                  No events.
+                </div>
+              ) : (
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800 bg-zinc-900/80 text-xs uppercase tracking-wider text-zinc-500">
+                      <th className="px-5 py-2.5 font-medium">Type</th>
+                      <th className="px-5 py-2.5 font-medium">Reason</th>
+                      <th className="px-5 py-2.5 font-medium">Message</th>
+                      <th className="px-5 py-2.5 font-medium">Count</th>
+                      <th className="px-5 py-2.5 font-medium">Last seen</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/70">
+                    {events.map((ev, i) => (
+                      <tr key={i} className="align-top">
+                        <td className="px-5 py-2.5">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                              ev.type === "Warning"
+                                ? "bg-amber-500/10 text-amber-400 ring-amber-500/30"
+                                : "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30"
+                            }`}
+                          >
+                            {ev.type}
+                          </span>
+                        </td>
+                        <td className="px-5 py-2.5 font-mono text-zinc-300">
+                          {ev.reason}
+                        </td>
+                        <td className="px-5 py-2.5 text-zinc-400">
+                          {ev.message}
+                        </td>
+                        <td className="px-5 py-2.5 font-mono text-zinc-400">
+                          {ev.count}
+                        </td>
+                        <td className="px-5 py-2.5 whitespace-nowrap text-zinc-500">
+                          {relativeAge(ev.lastSeen)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>

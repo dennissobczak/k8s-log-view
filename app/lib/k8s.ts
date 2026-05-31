@@ -76,6 +76,46 @@ export async function ListPods(): Promise<PodInfo[]> {
     });
 }
 
+export interface EventInfo {
+    type: string; // Normal | Warning
+    reason: string;
+    message: string;
+    count: number;
+    lastSeen: string | null;
+}
+
+export async function GetPodEvents(
+    namespace: string,
+    name: string
+): Promise<EventInfo[]> {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+
+    const events = await k8sApi.listNamespacedEvent({
+        namespace,
+        fieldSelector: `involvedObject.name=${name},involvedObject.kind=Pod`,
+    });
+
+    const toTime = (ev: k8s.CoreV1Event): number => {
+        const t = ev.lastTimestamp ?? ev.eventTime ?? ev.firstTimestamp;
+        return t ? new Date(t).getTime() : 0;
+    };
+
+    return events.items
+        .sort((a, b) => toTime(a) - toTime(b))
+        .map((ev) => {
+            const last = ev.lastTimestamp ?? ev.eventTime ?? ev.firstTimestamp;
+            return {
+                type: ev.type ?? "Normal",
+                reason: ev.reason ?? "",
+                message: ev.message ?? "",
+                count: ev.count ?? 1,
+                lastSeen: last ? new Date(last).toISOString() : null,
+            };
+        });
+}
+
 export async function GetPodLogs(
     namespace: string,
     name: string,
