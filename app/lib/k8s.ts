@@ -59,6 +59,23 @@ export async function ListPods(): Promise<PodInfo[]> {
     });
 }
 
+export async function GetPodLogs(
+    namespace: string,
+    name: string,
+    opts?: { previous?: boolean; tailLines?: number }
+): Promise<string> {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+
+    return k8sApi.readNamespacedPodLog({
+        name,
+        namespace,
+        previous: opts?.previous,
+        tailLines: opts?.tailLines,
+    });
+}
+
 export async function GetFirstPodLogs() {
     const kc = new k8s.KubeConfig();
     kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
