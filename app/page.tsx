@@ -1,11 +1,14 @@
 import Image from "next/image";
 
-import { InitK8sClient, GetFirstPodLogs } from "./lib/k8s";
+import { InitK8sClient, GetFirstPodLogs, GetFirstPodPreviousLogs } from "./lib/k8s";
 
 export default function Home() {
 
   InitK8sClient();
-  GetFirstPodLogs();
+  //GetFirstPodLogs();
+
+  console.log("MAC");
+  GetFirstPodPreviousLogs();
 
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">

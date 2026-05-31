@@ -42,3 +42,24 @@ export async function GetFirstPodLogs() {
 
     return logs;
 }
+
+export async function GetFirstPodPreviousLogs() {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+
+    const pods = await k8sApi.listPodForAllNamespaces();
+
+    const pod = pods.items[1];
+
+    // logs from the previously terminated container instance (kubectl logs --previous)
+    const logs = await k8sApi.readNamespacedPodLog({
+        name: pod.metadata!.name!,
+        namespace: pod.metadata!.namespace!,
+        previous: true,
+    });
+
+    console.log(logs);
+
+    return logs;
+}
