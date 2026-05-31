@@ -95,6 +95,7 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
               <th className="px-5 py-3 font-medium">Status</th>
               <th className="px-5 py-3 font-medium">Ready</th>
               <th className="px-5 py-3 font-medium">Restarts</th>
+              <th className="px-5 py-3 font-medium">Events</th>
               <th className="px-5 py-3 font-medium">Node</th>
               <th className="px-5 py-3 font-medium">Age</th>
             </tr>
@@ -102,7 +103,7 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
           <tbody className="divide-y divide-zinc-800/70">
             {pods.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
+                <td colSpan={8} className="px-5 py-12 text-center text-zinc-500">
                   No pods found.
                 </td>
               </tr>
@@ -138,6 +139,17 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
                       }
                     >
                       {pod.restarts}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                        pod.eventCount > 0
+                          ? "bg-indigo-500/10 text-indigo-300 ring-indigo-500/30"
+                          : "bg-zinc-700/30 text-zinc-500 ring-zinc-600/30"
+                      }`}
+                    >
+                      {pod.eventCount}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-zinc-400">{pod.node}</td>

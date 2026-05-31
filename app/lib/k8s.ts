@@ -32,6 +32,7 @@ export interface PodInfo {
     node: string;
     startTime: string | null;
     containers: string[];
+    eventCount: number;
 }
 
 export async function ListPods(): Promise<PodInfo[]> {
@@ -39,12 +40,25 @@ export async function ListPods(): Promise<PodInfo[]> {
     kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
     const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
 
-    const pods = await k8sApi.listPodForAllNamespaces();
+    const [pods, events] = await Promise.all([
+        k8sApi.listPodForAllNamespaces(),
+        k8sApi.listEventForAllNamespaces(),
+    ]);
+
+    // Count events per pod, keyed by "namespace/name".
+    const eventCounts = new Map<string, number>();
+    for (const ev of events.items) {
+        const obj = ev.involvedObject;
+        if (obj?.kind !== "Pod" || !obj.name || !obj.namespace) continue;
+        const key = `${obj.namespace}/${obj.name}`;
+        eventCounts.set(key, (eventCounts.get(key) ?? 0) + 1);
+    }
 
     return pods.items.map((pod) => {
         const containers = pod.status?.containerStatuses ?? [];
         const readyCount = containers.filter((c) => c.ready).length;
         const restarts = containers.reduce((sum, c) => sum + (c.restartCount ?? 0), 0);
+        const key = `${pod.metadata?.namespace}/${pod.metadata?.name}`;
 
         return {
             name: pod.metadata?.name ?? "<unknown>",
@@ -57,6 +71,7 @@ export async function ListPods(): Promise<PodInfo[]> {
                 ? new Date(pod.status.startTime).toISOString()
                 : null,
             containers: (pod.spec?.containers ?? []).map((c) => c.name),
+            eventCount: eventCounts.get(key) ?? 0,
         };
     });
 }
