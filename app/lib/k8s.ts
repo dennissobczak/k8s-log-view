@@ -31,6 +31,7 @@ export interface PodInfo {
     restarts: number;
     node: string;
     startTime: string | null;
+    containers: string[];
 }
 
 export async function ListPods(): Promise<PodInfo[]> {
@@ -55,6 +56,7 @@ export async function ListPods(): Promise<PodInfo[]> {
             startTime: pod.status?.startTime
                 ? new Date(pod.status.startTime).toISOString()
                 : null,
+            containers: (pod.spec?.containers ?? []).map((c) => c.name),
         };
     });
 }
@@ -62,7 +64,7 @@ export async function ListPods(): Promise<PodInfo[]> {
 export async function GetPodLogs(
     namespace: string,
     name: string,
-    opts?: { previous?: boolean; tailLines?: number }
+    opts?: { container?: string; previous?: boolean; tailLines?: number }
 ): Promise<string> {
     const kc = new k8s.KubeConfig();
     kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
@@ -71,6 +73,7 @@ export async function GetPodLogs(
     return k8sApi.readNamespacedPodLog({
         name,
         namespace,
+        container: opts?.container,
         previous: opts?.previous,
         tailLines: opts?.tailLines,
     });

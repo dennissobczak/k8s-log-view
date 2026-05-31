@@ -34,20 +34,33 @@ function relativeAge(startTime: string | null): string {
 
 export default function PodTable({ pods }: { pods: PodInfo[] }) {
   const [selected, setSelected] = useState<PodInfo | null>(null);
+  const [container, setContainer] = useState<string | undefined>(undefined);
   const [logs, setLogs] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function openLogs(pod: PodInfo) {
-    setSelected(pod);
+  function loadLogs(pod: PodInfo, containerName?: string) {
     setLogs("");
     setError(null);
     setLoading(true);
 
-    fetchPodLogs(pod.namespace, pod.name)
+    fetchPodLogs(pod.namespace, pod.name, containerName)
       .then((text) => setLogs(text))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+  }
+
+  function openLogs(pod: PodInfo) {
+    // Default to the first container; selector lets the user switch.
+    const first = pod.containers[0];
+    setSelected(pod);
+    setContainer(first);
+    loadLogs(pod, first);
+  }
+
+  function selectContainer(pod: PodInfo, containerName: string) {
+    setContainer(containerName);
+    loadLogs(pod, containerName);
   }
 
   function close() {
@@ -152,6 +165,22 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
                   {selected.namespace} · current instance logs
                 </p>
               </div>
+              {selected.containers.length > 1 && (
+                <label className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                  Container
+                  <select
+                    value={container}
+                    onChange={(e) => selectContainer(selected, e.target.value)}
+                    className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-100 outline-none transition-colors hover:border-zinc-600 focus:border-sky-500"
+                  >
+                    {selected.containers.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <button
                 onClick={close}
                 aria-label="Close"
