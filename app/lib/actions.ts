@@ -2,12 +2,14 @@
 
 import { GetPodLogs } from './k8s';
 
-// Server Action: fetch the logs of the currently running instance of a pod.
-// Pass `container` to select a specific container in a multi-container pod.
+// Server Action: fetch a pod's logs.
+// Pass `container` to select a specific container in a multi-container pod, and
+// `previous` to read the logs of the previously terminated instance (kubectl logs --previous).
 export async function fetchPodLogs(
     namespace: string,
     name: string,
-    container?: string
+    container?: string,
+    previous?: boolean
 ): Promise<string> {
-    return GetPodLogs(namespace, name, { container, tailLines: 1000 });
+    return GetPodLogs(namespace, name, { container, previous, tailLines: 1000 });
 }

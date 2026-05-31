@@ -35,32 +35,39 @@ function relativeAge(startTime: string | null): string {
 export default function PodTable({ pods }: { pods: PodInfo[] }) {
   const [selected, setSelected] = useState<PodInfo | null>(null);
   const [container, setContainer] = useState<string | undefined>(undefined);
+  const [previous, setPrevious] = useState(false);
   const [logs, setLogs] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function loadLogs(pod: PodInfo, containerName?: string) {
+  function loadLogs(pod: PodInfo, containerName?: string, usePrevious = false) {
     setLogs("");
     setError(null);
     setLoading(true);
 
-    fetchPodLogs(pod.namespace, pod.name, containerName)
+    fetchPodLogs(pod.namespace, pod.name, containerName, usePrevious)
       .then((text) => setLogs(text))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }
 
   function openLogs(pod: PodInfo) {
-    // Default to the first container; selector lets the user switch.
+    // Default to the first container, current instance; toggles let the user switch.
     const first = pod.containers[0];
     setSelected(pod);
     setContainer(first);
-    loadLogs(pod, first);
+    setPrevious(false);
+    loadLogs(pod, first, false);
   }
 
   function selectContainer(pod: PodInfo, containerName: string) {
     setContainer(containerName);
-    loadLogs(pod, containerName);
+    loadLogs(pod, containerName, previous);
+  }
+
+  function togglePrevious(pod: PodInfo, usePrevious: boolean) {
+    setPrevious(usePrevious);
+    loadLogs(pod, container, usePrevious);
   }
 
   function close() {
@@ -162,11 +169,23 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
                   {selected.name}
                 </h2>
                 <p className="mt-0.5 text-xs text-zinc-500">
-                  {selected.namespace} · current instance logs
+                  {selected.namespace} ·{" "}
+                  {previous ? "previous instance logs" : "current instance logs"}
                 </p>
               </div>
+              <button
+                onClick={() => togglePrevious(selected, !previous)}
+                aria-pressed={previous}
+                className={`ml-auto rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  previous
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600"
+                }`}
+              >
+                Previous
+              </button>
               {selected.containers.length > 1 && (
-                <label className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <label className="flex items-center gap-2 text-xs text-zinc-500">
                   Container
                   <select
                     value={container}
