@@ -1,12 +1,13 @@
-import { ListPods, type PodInfo } from "./lib/k8s";
+import { ListPods, ListNamespaces, type PodInfo } from "./lib/k8s";
 import PodTable from "./components/PodTable";
 
 export default async function Home() {
   let pods: PodInfo[] = [];
+  let namespaces: string[] = [];
   let error: string | null = null;
 
   try {
-    pods = await ListPods();
+    [pods, namespaces] = await Promise.all([ListPods(), ListNamespaces()]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -38,7 +39,7 @@ export default async function Home() {
             <p className="mt-1 font-mono text-xs text-rose-300/80">{error}</p>
           </div>
         ) : (
-          <PodTable pods={pods} />
+          <PodTable pods={pods} namespaces={namespaces} />
         )}
       </div>
     </div>

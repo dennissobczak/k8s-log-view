@@ -32,7 +32,18 @@ function relativeAge(startTime: string | null): string {
   return `${seconds}s`;
 }
 
-export default function PodTable({ pods }: { pods: PodInfo[] }) {
+export default function PodTable({
+  pods,
+  namespaces,
+}: {
+  pods: PodInfo[];
+  namespaces: string[];
+}) {
+  const [namespace, setNamespace] = useState<string>("");
+  const visiblePods = namespace
+    ? pods.filter((p) => p.namespace === namespace)
+    : pods;
+
   const [selected, setSelected] = useState<PodInfo | null>(null);
   const [container, setContainer] = useState<string | undefined>(undefined);
   const [previous, setPrevious] = useState(false);
@@ -110,6 +121,27 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
 
   return (
     <>
+      <div className="mb-4 flex items-center gap-2">
+        <label className="flex items-center gap-2 text-xs text-zinc-500">
+          Namespace
+          <select
+            value={namespace}
+            onChange={(e) => setNamespace(e.target.value)}
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-100 outline-none transition-colors hover:border-zinc-600 focus:border-sky-500"
+          >
+            <option value="">All namespaces</option>
+            {namespaces.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="text-xs text-zinc-500">
+          {visiblePods.length} pod{visiblePods.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 shadow-2xl shadow-black/40 backdrop-blur">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
@@ -125,14 +157,14 @@ export default function PodTable({ pods }: { pods: PodInfo[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/70">
-            {pods.length === 0 ? (
+            {visiblePods.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-5 py-12 text-center text-zinc-500">
                   No pods found.
                 </td>
               </tr>
             ) : (
-              pods.map((pod) => (
+              visiblePods.map((pod) => (
                 <tr
                   key={`${pod.namespace}/${pod.name}`}
                   onClick={() => openLogs(pod)}

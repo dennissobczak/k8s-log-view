@@ -76,6 +76,19 @@ export async function ListPods(): Promise<PodInfo[]> {
     });
 }
 
+export async function ListNamespaces(): Promise<string[]> {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+
+    const res = await k8sApi.listNamespace();
+
+    return res.items
+        .map((ns) => ns.metadata?.name)
+        .filter((name): name is string => Boolean(name))
+        .sort((a, b) => a.localeCompare(b));
+}
+
 export interface EventInfo {
     type: string; // Normal | Warning
     reason: string;
