@@ -40,6 +40,13 @@ export default async function Home() {
         ) : (
           <PodTable pods={pods} />
         )}
+
+        <footer className="mt-10 border-t border-zinc-800/70 pt-4 text-xs text-zinc-600">
+          <span>build</span>{" "}
+          <span className="font-mono text-zinc-500">
+            {process.env.NEXT_PUBLIC_GIT_BRANCH}@{process.env.NEXT_PUBLIC_GIT_COMMIT}
+          </span>
+        </footer>
       </div>
     </div>
   );
