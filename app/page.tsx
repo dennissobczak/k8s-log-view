@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ListPods, ListNamespaces, type PodInfo } from "./lib/k8s";
 import PodTable from "./components/PodTable";
 
@@ -25,6 +26,12 @@ export default async function Home() {
             <h1 className="text-2xl font-semibold tracking-tight">
               Kubernetes Pods
             </h1>
+            <Link
+              href="/dashboard"
+              className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+            >
+              Dashboard →
+            </Link>
           </div>
           <p className="text-sm text-zinc-400">
             {error
