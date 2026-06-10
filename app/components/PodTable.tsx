@@ -40,9 +40,13 @@ export default function PodTable({
   namespaces: string[];
 }) {
   const [namespace, setNamespace] = useState<string>("");
-  const visiblePods = namespace
-    ? pods.filter((p) => p.namespace === namespace)
-    : pods;
+  const [podFilter, setPodFilter] = useState<string>("");
+  const query = podFilter.trim().toLowerCase();
+  const visiblePods = pods.filter(
+    (p) =>
+      (!namespace || p.namespace === namespace) &&
+      (!query || p.name.toLowerCase().includes(query))
+  );
 
   const [selected, setSelected] = useState<PodInfo | null>(null);
   const [container, setContainer] = useState<string | undefined>(undefined);
@@ -136,6 +140,16 @@ export default function PodTable({
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-500">
+          Pod
+          <input
+            type="text"
+            value={podFilter}
+            onChange={(e) => setPodFilter(e.target.value)}
+            placeholder="Filter by name…"
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-100 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-sky-500"
+          />
         </label>
         <span className="text-xs text-zinc-500">
           {visiblePods.length} pod{visiblePods.length === 1 ? "" : "s"}
