@@ -1,11 +1,44 @@
 //'use server';
 
+import { existsSync } from 'node:fs';
+
 import * as k8s from '@kubernetes/client-node';
 
-export async function InitK8sClient() {
+const SERVICEACCOUNT_TOKEN_PATH =
+    '/var/run/secrets/kubernetes.io/serviceaccount/token';
+
+/**
+ * Detect whether the process is running inside a Kubernetes pod. The kubelet
+ * injects `KUBERNETES_SERVICE_HOST`/`KUBERNETES_SERVICE_PORT` into every
+ * container, and projects a service-account token onto the filesystem. We
+ * require both so we don't mistake a stray env var for an in-cluster context.
+ */
+function isInCluster(): boolean {
+    return (
+        Boolean(process.env.KUBERNETES_SERVICE_HOST) &&
+        Boolean(process.env.KUBERNETES_SERVICE_PORT) &&
+        existsSync(SERVICEACCOUNT_TOKEN_PATH)
+    );
+}
+
+/**
+ * Build a `CoreV1Api` client, choosing in-cluster authentication (mounted
+ * service-account token) when running inside a pod, and otherwise the local
+ * kubeconfig (`~/.kube/config` or `$KUBECONFIG`). A fresh config + client is
+ * created per call, matching the rest of this module.
+ */
+function getCoreV1Api(): k8s.CoreV1Api {
     const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    if (isInCluster()) {
+        kc.loadFromCluster();
+    } else {
+        kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
+    }
+    return kc.makeApiClient(k8s.CoreV1Api);
+}
+
+export async function InitK8sClient() {
+    const k8sApi = getCoreV1Api();
 
     k8sApi.listPodForAllNamespaces().then((res) => {
         console.log(res);
@@ -36,9 +69,7 @@ export interface PodInfo {
 }
 
 export async function ListPods(): Promise<PodInfo[]> {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     const [pods, events] = await Promise.all([
         k8sApi.listPodForAllNamespaces(),
@@ -77,9 +108,7 @@ export async function ListPods(): Promise<PodInfo[]> {
 }
 
 export async function ListNamespaces(): Promise<string[]> {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     const res = await k8sApi.listNamespace();
 
@@ -101,9 +130,7 @@ export async function GetPodEvents(
     namespace: string,
     name: string
 ): Promise<EventInfo[]> {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     const events = await k8sApi.listNamespacedEvent({
         namespace,
@@ -134,9 +161,7 @@ export async function GetPodLogs(
     name: string,
     opts?: { container?: string; previous?: boolean; tailLines?: number }
 ): Promise<string> {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     return k8sApi.readNamespacedPodLog({
         name,
@@ -148,9 +173,7 @@ export async function GetPodLogs(
 }
 
 export async function GetFirstPodLogs() {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     const pods = await k8sApi.listPodForAllNamespaces();
 
@@ -168,9 +191,7 @@ export async function GetFirstPodLogs() {
 }
 
 export async function GetFirstPodPreviousLogs() {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
-    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const k8sApi = getCoreV1Api();
 
     const pods = await k8sApi.listPodForAllNamespaces();
 
