@@ -2,7 +2,8 @@ name: Build and Publish Docker image
 
 # Builds the Docker image and pushes it to Docker Hub.
 #
-# Required repository secrets (Settings → Secrets and variables → Actions):
+# Required secrets on the "production" environment
+# (Settings → Environments → production → Environment secrets):
 #   DOCKERHUB_USERNAME  - your Docker Hub username
 #   DOCKERHUB_TOKEN     - a Docker Hub access token (Account Settings → Security)
 #
@@ -22,6 +23,7 @@ env:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
 
