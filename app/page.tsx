@@ -1,8 +1,15 @@
+import { connection } from "next/server";
 import Link from "next/link";
 import { ListPods, ListNamespaces, type PodInfo } from "./lib/k8s";
 import PodTable from "./components/PodTable";
 
 export default async function Home() {
+  // Wait for a real request before touching the cluster. Without this the page
+  // is statically prerendered at build time (in Docker/CI, where there is no
+  // cluster), baking the "Could not reach the cluster" error into the HTML that
+  // is then served forever — the in-cluster code never re-runs at request time.
+  await connection();
+
   let pods: PodInfo[] = [];
   let namespaces: string[] = [];
   let error: string | null = null;
