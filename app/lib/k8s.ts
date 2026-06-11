@@ -31,6 +31,20 @@ function getCoreV1Api(): k8s.CoreV1Api {
     const kc = new k8s.KubeConfig();
     if (isInCluster()) {
         kc.loadFromCluster();
+        // `loadFromCluster()` picks the API scheme from KUBERNETES_SERVICE_PORT
+        // and downgrades to plain `http` when that port is 80/8080/8001. The
+        // in-cluster API server is always served over TLS (its CA is mounted
+        // next to the token), and the client refuses an `http://` server unless
+        // skipTLSVerify is set — throwing "HTTP protocol is not allowed when
+        // skipTLSVerify is not set or false". Force the scheme back to https.
+        const cluster = kc.getCurrentCluster();
+        if (cluster && cluster.server.startsWith('http://')) {
+            const fixed: k8s.Cluster = {
+                ...cluster,
+                server: cluster.server.replace(/^http:\/\//, 'https://'),
+            };
+            kc.clusters = kc.clusters.map((c) => (c === cluster ? fixed : c));
+        }
     } else {
         kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
     }
