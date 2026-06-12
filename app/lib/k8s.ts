@@ -21,6 +21,38 @@ function isInCluster(): boolean {
     );
 }
 
+// Log the resolved connection details exactly once (this module creates a
+// fresh client per call, so without the guard we'd spam the pod logs).
+let connectionLogged = false;
+
+/**
+ * Force the current cluster's API server back to `https://`.
+ *
+ * The in-cluster API server is *always* TLS-backed — its CA is mounted next to
+ * the service-account token — but `@kubernetes/client-node` can end up with an
+ * `http://` server URL two different ways, and in both cases `createAgent()`
+ * throws "HTTP protocol is not allowed when skipTLSVerify is not set or false":
+ *
+ *   1. `loadFromCluster()` derives the scheme from `KUBERNETES_SERVICE_PORT`
+ *      and downgrades to `http` when that port is 80/8080/8001.
+ *   2. `loadFromDefault()`, finding no kubeconfig and no token file, falls back
+ *      to a hard-coded `http://localhost:8080`.
+ *
+ * Rewriting the scheme is safe in both: an HTTPS request to the real API server
+ * succeeds, while the bogus `localhost:8080` fallback fails loudly either way.
+ */
+function forceHttpsServer(kc: k8s.KubeConfig): void {
+    const cluster = kc.getCurrentCluster();
+    if (!cluster || !cluster.server.startsWith('http://')) return;
+    const fixed: k8s.Cluster = {
+        ...cluster,
+        server: cluster.server.replace(/^http:\/\//, 'https://'),
+    };
+    // Match by name rather than identity: robust even if a future client
+    // version returns a copy from getCurrentCluster() instead of the live ref.
+    kc.clusters = kc.clusters.map((c) => (c.name === cluster.name ? fixed : c));
+}
+
 /**
  * Build a `CoreV1Api` client, choosing in-cluster authentication (mounted
  * service-account token) when running inside a pod, and otherwise the local
@@ -29,25 +61,31 @@ function isInCluster(): boolean {
  */
 function getCoreV1Api(): k8s.CoreV1Api {
     const kc = new k8s.KubeConfig();
-    if (isInCluster()) {
+    const inCluster = isInCluster();
+    if (inCluster) {
         kc.loadFromCluster();
-        // `loadFromCluster()` picks the API scheme from KUBERNETES_SERVICE_PORT
-        // and downgrades to plain `http` when that port is 80/8080/8001. The
-        // in-cluster API server is always served over TLS (its CA is mounted
-        // next to the token), and the client refuses an `http://` server unless
-        // skipTLSVerify is set — throwing "HTTP protocol is not allowed when
-        // skipTLSVerify is not set or false". Force the scheme back to https.
-        const cluster = kc.getCurrentCluster();
-        if (cluster && cluster.server.startsWith('http://')) {
-            const fixed: k8s.Cluster = {
-                ...cluster,
-                server: cluster.server.replace(/^http:\/\//, 'https://'),
-            };
-            kc.clusters = kc.clusters.map((c) => (c === cluster ? fixed : c));
-        }
     } else {
         kc.loadFromDefault(); // reads ~/.kube/config or $KUBECONFIG
     }
+    forceHttpsServer(kc);
+
+    if (!connectionLogged) {
+        connectionLogged = true;
+        // One-time diagnostic so the pod logs reveal exactly which auth path
+        // and server URL were chosen — the source of truth when debugging the
+        // "HTTP protocol is not allowed" / "Could not reach the cluster" errors.
+        console.log(
+            '[k8s] connection resolved:',
+            JSON.stringify({
+                inCluster,
+                server: kc.getCurrentCluster()?.server ?? null,
+                KUBERNETES_SERVICE_HOST: process.env.KUBERNETES_SERVICE_HOST ?? null,
+                KUBERNETES_SERVICE_PORT: process.env.KUBERNETES_SERVICE_PORT ?? null,
+                tokenMounted: existsSync(SERVICEACCOUNT_TOKEN_PATH),
+            }),
+        );
+    }
+
     return kc.makeApiClient(k8s.CoreV1Api);
 }
 

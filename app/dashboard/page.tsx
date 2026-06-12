@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import Link from "next/link";
 import { ListPods, type PodInfo } from "../lib/k8s";
 import HealthPieChart from "../components/HealthPieChart";
@@ -13,6 +14,10 @@ function isHealthy(pod: PodInfo): boolean {
 }
 
 export default async function Dashboard() {
+  // See app/page.tsx: force per-request rendering so ListPods() runs inside the
+  // pod (with in-cluster auth) instead of being prerendered at build time.
+  await connection();
+
   let pods: PodInfo[] = [];
   let error: string | null = null;
 
