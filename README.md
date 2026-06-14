@@ -19,7 +19,7 @@ It is comparable to what we see when executing the commands:
 
 * NextJS + React + Typescript
 
-Installing:
+### Local Run
 
 ```
 npm ci
@@ -27,3 +27,6 @@ npm run dev # for local testing, e.g., with minikube
 
 npm run build && npm run start # when ready to package the application
 ```
+
+### Install on K8s Cluster
+Use [this K8s-Log-View Helm Chart](https://github.com/dennissobczak/helmchart-k8s-log-view)
