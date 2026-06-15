@@ -1,7 +1,13 @@
 import { connection } from "next/server";
 import Link from "next/link";
-import { ListPods, type PodInfo } from "../lib/k8s";
+import {
+  ListPods,
+  MeasureClusterLatency,
+  type PodInfo,
+  type ClusterLatency,
+} from "../lib/k8s";
 import HealthPieChart from "../components/HealthPieChart";
+import LatencyCard from "../components/LatencyCard";
 
 // A pod counts as healthy when it is up and all of its containers are ready,
 // or when it has run to completion. Anything else — CrashLoopBackOff, not
@@ -19,10 +25,21 @@ export default async function Dashboard() {
   await connection();
 
   let pods: PodInfo[] = [];
+  let latency: ClusterLatency | null = null;
   let error: string | null = null;
 
   try {
-    pods = await ListPods();
+    // Latency is measured alongside the pod list, but a failed/unreachable
+    // probe must not blank the whole dashboard — degrade it to null instead.
+    [pods, latency] = await Promise.all([
+      ListPods(),
+      MeasureClusterLatency().catch((e) => {
+        // Don't blank the dashboard if the probe fails — degrade to null, but
+        // log the real cause so it's visible in the pod logs.
+        console.error("[dashboard] latency probe failed:", e);
+        return null;
+      }),
+    ]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -61,16 +78,31 @@ export default async function Dashboard() {
             <p className="mt-1 font-mono text-xs text-rose-300/80">{error}</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 shadow-2xl shadow-black/40 backdrop-blur">
-            <h2 className="mb-6 text-sm font-medium uppercase tracking-wider text-zinc-500">
-              Pod health
-            </h2>
-            <HealthPieChart
-              slices={[
-                { label: "Healthy", value: healthy, color: "#10b981" },
-                { label: "Unhealthy", value: unhealthy, color: "#f43f5e" },
-              ]}
-            />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 shadow-2xl shadow-black/40 backdrop-blur">
+              <h2 className="mb-6 text-sm font-medium uppercase tracking-wider text-zinc-500">
+                Pod health
+              </h2>
+              <HealthPieChart
+                slices={[
+                  { label: "Healthy", value: healthy, color: "#10b981" },
+                  { label: "Unhealthy", value: unhealthy, color: "#f43f5e" },
+                ]}
+              />
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 shadow-2xl shadow-black/40 backdrop-blur">
+              <h2 className="mb-6 text-sm font-medium uppercase tracking-wider text-zinc-500">
+                Network latency
+              </h2>
+              {latency ? (
+                <LatencyCard latency={latency} />
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  Could not measure API-server latency.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

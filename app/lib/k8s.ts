@@ -54,12 +54,12 @@ function forceHttpsServer(kc: k8s.KubeConfig): void {
 }
 
 /**
- * Build a `CoreV1Api` client, choosing in-cluster authentication (mounted
+ * Load a `KubeConfig`, choosing in-cluster authentication (mounted
  * service-account token) when running inside a pod, and otherwise the local
- * kubeconfig (`~/.kube/config` or `$KUBECONFIG`). A fresh config + client is
- * created per call, matching the rest of this module.
+ * kubeconfig (`~/.kube/config` or `$KUBECONFIG`). A fresh config is created per
+ * call, matching the rest of this module.
  */
-function getCoreV1Api(): k8s.CoreV1Api {
+function loadKubeConfig(): k8s.KubeConfig {
     const kc = new k8s.KubeConfig();
     const inCluster = isInCluster();
     if (inCluster) {
@@ -86,7 +86,15 @@ function getCoreV1Api(): k8s.CoreV1Api {
         );
     }
 
-    return kc.makeApiClient(k8s.CoreV1Api);
+    return kc;
+}
+
+/**
+ * Build a `CoreV1Api` client from the resolved kubeconfig. A fresh config +
+ * client is created per call, matching the rest of this module.
+ */
+function getCoreV1Api(): k8s.CoreV1Api {
+    return loadKubeConfig().makeApiClient(k8s.CoreV1Api);
 }
 
 export async function InitK8sClient() {
@@ -168,6 +176,60 @@ export async function ListNamespaces(): Promise<string[]> {
         .map((ns) => ns.metadata?.name)
         .filter((name): name is string => Boolean(name))
         .sort((a, b) => a.localeCompare(b));
+}
+
+export interface ClusterLatency {
+    /** API server host (no scheme), e.g. "10.0.0.1:6443" — for display. */
+    server: string;
+    /** Number of probes that completed successfully. */
+    samples: number;
+    minMs: number;
+    avgMs: number;
+    maxMs: number;
+}
+
+/**
+ * Measure round-trip network latency to the Kubernetes API server.
+ *
+ * We hit the `/version` endpoint several times over the *same* authenticated
+ * client the rest of the app uses (so no separate auth/TLS plumbing to get
+ * wrong), and report min/avg/max of the round-trips. `/version` returns a tiny,
+ * static payload and does almost no server-side work, so the timing is
+ * dominated by the network round-trip rather than API handling — the closest
+ * proxy for "network latency in the cluster" we can measure from where this app
+ * runs (a pod, or a workstation talking to the cluster).
+ *
+ * The first probe is treated as a warm-up (it pays TLS handshake / connection
+ * setup cost) and is excluded from the stats when we have more than one sample.
+ */
+export async function MeasureClusterLatency(
+    samples = 6
+): Promise<ClusterLatency> {
+    const kc = loadKubeConfig();
+    const host = (kc.getCurrentCluster()?.server ?? "").replace(
+        /^https?:\/\//,
+        ""
+    );
+    const versionApi = kc.makeApiClient(k8s.VersionApi);
+
+    const times: number[] = [];
+    for (let i = 0; i < samples; i++) {
+        const start = performance.now();
+        await versionApi.getCode();
+        times.push(performance.now() - start);
+    }
+
+    // Drop the warm-up probe (connection/TLS setup) once we have spares.
+    const measured = times.length > 1 ? times.slice(1) : times;
+    const sum = measured.reduce((a, b) => a + b, 0);
+
+    return {
+        server: host,
+        samples: measured.length,
+        minMs: Math.round(Math.min(...measured)),
+        avgMs: Math.round(sum / measured.length),
+        maxMs: Math.round(Math.max(...measured)),
+    };
 }
 
 export interface EventInfo {
