@@ -59,9 +59,9 @@ export default function LatencyCard({ latency }: { latency: ClusterLatency }) {
       <p className="text-xs text-zinc-500">
         Round-trip to{" "}
         <span className="font-mono text-zinc-400">
-          {latency.server || "API server"}
+          {latency.service || "API server"}
         </span>{" "}
-        <code className="text-zinc-400">/healthz</code> · {latency.samples}{" "}
+        <code className="text-zinc-400">/version</code> · {latency.samples}{" "}
         probe{latency.samples === 1 ? "" : "s"}
       </p>
     </div>

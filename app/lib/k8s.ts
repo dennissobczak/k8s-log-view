@@ -179,8 +179,8 @@ export async function ListNamespaces(): Promise<string[]> {
 }
 
 export interface ClusterLatency {
-    /** API server host (no scheme), e.g. "10.0.0.1:6443" — for display. */
-    server: string;
+    /** API server Service name, e.g. "kubernetes.default.svc" — for display. */
+    service: string;
     /** Number of probes that completed successfully. */
     samples: number;
     minMs: number;
@@ -206,10 +206,10 @@ export async function MeasureClusterLatency(
     samples = 6
 ): Promise<ClusterLatency> {
     const kc = loadKubeConfig();
-    const host = (kc.getCurrentCluster()?.server ?? "").replace(
-        /^https?:\/\//,
-        ""
-    );
+    // The API server is always fronted by the well-known `kubernetes` Service
+    // in the `default` namespace, so report that rather than the resolved
+    // IP:port from the kubeconfig.
+    const service = "kubernetes.default.svc";
     const versionApi = kc.makeApiClient(k8s.VersionApi);
 
     const times: number[] = [];
@@ -224,7 +224,7 @@ export async function MeasureClusterLatency(
     const sum = measured.reduce((a, b) => a + b, 0);
 
     return {
-        server: host,
+        service,
         samples: measured.length,
         minMs: Math.round(Math.min(...measured)),
         avgMs: Math.round(sum / measured.length),
