@@ -12,6 +12,7 @@ on:
 jobs:
   renovate:
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: write
       pull-requests: write
