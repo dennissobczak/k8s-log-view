@@ -1,0 +1,27 @@
+name: Renovate
+
+# Runs Renovate once per day to open PRs for dependency updates.
+# Automerge behavior (which updates merge automatically, and when) is
+# configured in renovate.json, not here.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # once daily at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Renovate
+        uses: renovatebot/github-action@v40
+        with:
+          configurationFile: renovate.json
+          token: "${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}"
