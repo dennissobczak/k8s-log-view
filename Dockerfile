@@ -3,7 +3,7 @@
 # Multi-stage build for the Next.js 16 app, producing a minimal runtime image
 # from the standalone output (output: "standalone" in next.config.ts).
 # Node 20.9+ is required by Next 16 (see node_modules/next/package.json engines).
-ARG NODE_VERSION=22-alpine
+ARG NODE_VERSION=24-alpine
 
 # --- deps: install full dependencies for the build -------------------------
 FROM node:${NODE_VERSION} AS deps
