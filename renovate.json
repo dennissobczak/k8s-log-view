@@ -6,7 +6,7 @@
   "packageRules": [
     {
       "matchUpdateTypes": ["patch"],
-      "automerge": true,
+      "automerge": false,
       "automergeType": "pr",
       "automergeSchedule": ["* 17-19 * * *"],
       "platformAutomerge": true
