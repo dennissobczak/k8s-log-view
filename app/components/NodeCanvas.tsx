@@ -1,54 +1,75 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { NodeInfo } from "../lib/k8s";
+import type { NodeInfo, PodInfo } from "../lib/k8s";
 import AutoRefreshToggle from "./AutoRefreshToggle";
 
-// Card geometry (CSS pixels). Nodes are laid out in a responsive grid whose
-// column count is derived from the available canvas width.
-const CARD_W = 240;
-const CARD_H = 132;
-const GAP = 20;
-const PAD = 4; // inner padding so highlight rings aren't clipped at the edges
+// Node-card geometry (CSS pixels). Cards have a fixed width and a height that
+// grows with the number of pods scheduled on the node.
+const CARD_W = 300;
+const HEADER_H = 52;
+const CARD_PAD = 14;
+const GAP = 20; // gap between node cards
+const OUTER_PAD = 4; // canvas padding so highlight rings aren't clipped
 
-// Theme colors (kept in sync with the Tailwind zinc/status palette used elsewhere).
+// Pod-object geometry, laid out in a grid inside each node card.
+const POD = 22;
+const POD_GAP = 7;
+
 const COLORS = {
-  bg: "#09090b", // zinc-950
   card: "#18181b", // zinc-900
-  cardHover: "#1f1f23",
+  border: "#27272a", // zinc-800
   text: "#f4f4f5", // zinc-100
   subtle: "#a1a1aa", // zinc-400
   faint: "#71717a", // zinc-500
-  amber: "#f59e0b",
 };
 
-function statusColor(node: NodeInfo): string {
+function nodeAccent(node: NodeInfo): string {
   if (node.status === "Ready") return "#10b981"; // emerald-500
   if (node.status === "NotReady") return "#f43f5e"; // rose-500
   return "#a1a1aa"; // zinc-400 (Unknown)
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, r);
+// A pod's color reflects its health: green when Running and fully ready, blue
+// when it has completed, amber while it's coming up, red when it has failed.
+function podColor(pod: PodInfo): string {
+  if (pod.phase === "Succeeded") return "#38bdf8"; // sky-400
+  if (pod.phase === "Running") {
+    const [ready, total] = pod.ready.split("/").map(Number);
+    return total > 0 && ready === total ? "#10b981" : "#f59e0b"; // emerald / amber
+  }
+  if (pod.phase === "Pending") return "#f59e0b"; // amber-500
+  return "#f43f5e"; // Failed / Unknown → rose-500
 }
 
-export default function NodeCanvas({ nodes }: { nodes: NodeInfo[] }) {
+// Pods reachable through a node grid: how many fit per row inside a card.
+const POD_COLS = Math.max(
+  1,
+  Math.floor((CARD_W - CARD_PAD * 2 + POD_GAP) / (POD + POD_GAP))
+);
+
+function cardHeight(podCount: number): number {
+  const rows = Math.max(1, Math.ceil(podCount / POD_COLS));
+  const body = rows * POD + (rows - 1) * POD_GAP;
+  return HEADER_H + CARD_PAD + body + CARD_PAD;
+}
+
+type PodHit = { x: number; y: number; pod: PodInfo };
+
+export default function NodeCanvas({
+  nodes,
+  pods,
+}: {
+  nodes: NodeInfo[];
+  pods: PodInfo[];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
-  const [hovered, setHovered] = useState<number | null>(null);
-  // Card hit-boxes in CSS pixels, recomputed on every draw for hover testing.
-  const rectsRef = useRef<{ x: number; y: number; w: number; h: number }[]>([]);
+  const [hovered, setHovered] = useState<PodInfo | null>(null);
+  const hitsRef = useRef<PodHit[]>([]);
 
-  // Track the container width so the grid reflows responsively.
+  // Track container width so the node cards reflow responsively.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -60,119 +81,159 @@ export default function NodeCanvas({ nodes }: { nodes: NodeInfo[] }) {
     return () => ro.disconnect();
   }, []);
 
-  // Draw whenever the data, size, or hover target changes.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || width === 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const cols = Math.max(1, Math.floor((width - PAD * 2 + GAP) / (CARD_W + GAP)));
-    const rows = Math.max(1, Math.ceil(nodes.length / cols));
-    const cssHeight = rows * CARD_H + (rows - 1) * GAP + PAD * 2;
+    // Group pods by their scheduling node. Pods with no node (unscheduled) are
+    // omitted — they don't belong to any node object on the canvas.
+    const podsByNode = new Map<string, PodInfo[]>();
+    for (const pod of pods) {
+      if (!pod.node) continue;
+      const list = podsByNode.get(pod.node);
+      if (list) list.push(pod);
+      else podsByNode.set(pod.node, [pod]);
+    }
 
-    // Scale the backing store for crisp text on HiDPI displays.
+    const cols = Math.max(
+      1,
+      Math.floor((width - OUTER_PAD * 2 + GAP) / (CARD_W + GAP))
+    );
+
+    // Place cards row by row; each row is as tall as its tallest card.
+    type Placed = { node: NodeInfo; nodePods: PodInfo[]; x: number; top: number; h: number };
+    const placed: Placed[] = [];
+    let y = OUTER_PAD;
+    let rowMaxH = 0;
+    nodes.forEach((node, i) => {
+      const col = i % cols;
+      if (col === 0 && i > 0) {
+        y += rowMaxH + GAP;
+        rowMaxH = 0;
+      }
+      const nodePods = (podsByNode.get(node.name) ?? []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+      const h = cardHeight(nodePods.length);
+      rowMaxH = Math.max(rowMaxH, h);
+      placed.push({
+        node,
+        nodePods,
+        x: OUTER_PAD + col * (CARD_W + GAP),
+        top: y,
+        h,
+      });
+    });
+    const cssHeight = y + rowMaxH + OUTER_PAD;
+
+    // Scale the backing store for crisp rendering on HiDPI displays.
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(cssHeight * dpr);
     canvas.style.height = `${cssHeight}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
     ctx.clearRect(0, 0, width, cssHeight);
 
-    const rects: { x: number; y: number; w: number; h: number }[] = [];
+    const hits: PodHit[] = [];
 
-    nodes.forEach((node, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = PAD + col * (CARD_W + GAP);
-      const y = PAD + row * (CARD_H + GAP);
-      rects.push({ x, y, w: CARD_W, h: CARD_H });
-
-      const accent = statusColor(node);
-      const isHover = hovered === i;
+    for (const { node, nodePods, x, top: cardY, h } of placed) {
+      const accent = nodeAccent(node);
 
       // Card body.
-      roundRect(ctx, x, y, CARD_W, CARD_H, 12);
-      ctx.fillStyle = isHover ? COLORS.cardHover : COLORS.card;
+      ctx.beginPath();
+      ctx.roundRect(x, cardY, CARD_W, h, 12);
+      ctx.fillStyle = COLORS.card;
       ctx.fill();
-      ctx.lineWidth = isHover ? 2 : 1;
-      ctx.strokeStyle = isHover ? accent : "#27272a"; // zinc-800
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = COLORS.border;
       ctx.stroke();
 
-      // Accent bar down the left edge, colored by status.
-      roundRect(ctx, x, y, 5, CARD_H, 12);
-      ctx.fillStyle = accent;
-      ctx.fill();
-
-      const left = x + 18;
-      let cy = y + 26;
-
-      // Node name.
-      ctx.fillStyle = COLORS.text;
-      ctx.font =
-        "600 14px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
-      ctx.textBaseline = "middle";
-      ctx.fillText(fit(ctx, node.name, CARD_W - 36), left, cy);
-
-      // Status dot + label (and cordon note).
-      cy += 26;
+      // Status accent bar down the left edge.
       ctx.beginPath();
-      ctx.arc(left + 4, cy, 4, 0, Math.PI * 2);
+      ctx.roundRect(x, cardY, 5, h, 12);
       ctx.fillStyle = accent;
       ctx.fill();
-      ctx.fillStyle = COLORS.subtle;
-      ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-      const statusText = node.schedulable
-        ? node.status
-        : `${node.status} · SchedulingDisabled`;
-      ctx.fillStyle = node.schedulable ? COLORS.subtle : COLORS.amber;
-      ctx.fillText(fit(ctx, statusText, CARD_W - 52), left + 16, cy);
 
-      // Roles.
-      cy += 24;
-      ctx.fillStyle = COLORS.faint;
-      ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
-      ctx.fillText(fit(ctx, node.roles.join(", "), CARD_W - 36), left, cy);
-
-      // Resources: cpu / memory.
-      cy += 22;
-      ctx.fillStyle = COLORS.subtle;
-      ctx.fillText(
-        fit(ctx, `${node.cpu} vCPU · ${node.memory}`, CARD_W - 36),
-        left,
-        cy
-      );
-
-      // Version (right-aligned in the header row).
-      ctx.fillStyle = COLORS.faint;
-      ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
-      ctx.textAlign = "right";
-      ctx.fillText(node.version, x + CARD_W - 14, y + 26);
+      // Header: node name + status dot + pod count.
+      const left = x + 18;
+      ctx.textBaseline = "middle";
       ctx.textAlign = "left";
-    });
+      ctx.beginPath();
+      ctx.arc(left + 4, cardY + 22, 4, 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
 
-    rectsRef.current = rects;
-  }, [nodes, width, hovered]);
+      ctx.fillStyle = COLORS.text;
+      ctx.font = "600 14px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace";
+      ctx.fillText(fit(ctx, node.name, CARD_W - 90), left + 16, cardY + 22);
+
+      ctx.fillStyle = COLORS.faint;
+      ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(
+        `${nodePods.length} pod${nodePods.length === 1 ? "" : "s"}`,
+        x + CARD_W - 14,
+        cardY + 22
+      );
+      ctx.textAlign = "left";
+
+      // Divider under the header.
+      ctx.beginPath();
+      ctx.moveTo(x + 14, cardY + HEADER_H - 8);
+      ctx.lineTo(x + CARD_W - 14, cardY + HEADER_H - 8);
+      ctx.strokeStyle = COLORS.border;
+      ctx.stroke();
+
+      // Pods as objects in a grid.
+      if (nodePods.length === 0) {
+        ctx.fillStyle = COLORS.faint;
+        ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+        ctx.fillText("No pods scheduled", left, cardY + HEADER_H + 12);
+      } else {
+        const gridX = x + CARD_PAD;
+        const gridY = cardY + HEADER_H;
+        nodePods.forEach((pod, i) => {
+          const pc = i % POD_COLS;
+          const pr = Math.floor(i / POD_COLS);
+          const px = gridX + pc * (POD + POD_GAP);
+          const py = gridY + pr * (POD + POD_GAP);
+          const color = podColor(pod);
+          const isHover = hovered === pod;
+
+          ctx.beginPath();
+          ctx.roundRect(px, py, POD, POD, 5);
+          ctx.fillStyle = isHover ? color : color + "33"; // translucent unless hovered
+          ctx.fill();
+          ctx.lineWidth = isHover ? 2 : 1;
+          ctx.strokeStyle = color;
+          ctx.stroke();
+
+          hits.push({ x: px, y: py, pod });
+        });
+      }
+    }
+
+    hitsRef.current = hits;
+  }, [nodes, pods, width, hovered]);
 
   function handleMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const idx = rectsRef.current.findIndex(
-      (r) => mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
+    const hit = hitsRef.current.find(
+      (h) => mx >= h.x && mx <= h.x + POD && my >= h.y && my <= h.y + POD
     );
-    setHovered(idx === -1 ? null : idx);
+    setHovered(hit ? hit.pod : null);
   }
-
-  const active = hovered !== null ? nodes[hovered] : null;
 
   return (
     <>
       <div className="mb-4 flex items-center gap-3">
         <span className="text-xs text-zinc-500">
-          {nodes.length} node{nodes.length === 1 ? "" : "s"} on canvas
+          {nodes.length} node{nodes.length === 1 ? "" : "s"} · pods grouped by node
         </span>
         <AutoRefreshToggle className="ml-auto" />
       </div>
@@ -191,21 +252,22 @@ export default function NodeCanvas({ nodes }: { nodes: NodeInfo[] }) {
             onMouseMove={handleMove}
             onMouseLeave={() => setHovered(null)}
             className="block w-full"
-            style={{ cursor: active ? "pointer" : "default" }}
+            style={{ cursor: hovered ? "pointer" : "default" }}
           />
         )}
       </div>
 
-      {active && (
-        <p className="mt-3 font-mono text-xs text-zinc-500">
-          {active.name} — {active.internalIP} · {active.osImage}
+      {hovered && (
+        <p className="mt-3 font-mono text-xs text-zinc-400">
+          {hovered.namespace}/{hovered.name} · {hovered.phase} · {hovered.ready}{" "}
+          ready · {hovered.restarts} restart{hovered.restarts === 1 ? "" : "s"}
         </p>
       )}
     </>
   );
 }
 
-// Truncate text with an ellipsis so it never overflows the card width.
+// Truncate text with an ellipsis so it never overflows the given width.
 function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let str = text;

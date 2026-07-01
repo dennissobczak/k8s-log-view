@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import Link from "next/link";
-import { ListNodes, type NodeInfo } from "../../lib/k8s";
+import { ListNodes, ListPods, type NodeInfo, type PodInfo } from "../../lib/k8s";
 import NodeCanvas from "../../components/NodeCanvas";
 
 export default async function NodesCanvas() {
@@ -9,10 +9,11 @@ export default async function NodesCanvas() {
   await connection();
 
   let nodes: NodeInfo[] = [];
+  let pods: PodInfo[] = [];
   let error: string | null = null;
 
   try {
-    nodes = await ListNodes();
+    [nodes, pods] = await Promise.all([ListNodes(), ListPods()]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -40,7 +41,7 @@ export default async function NodesCanvas() {
           <p className="text-sm text-zinc-400">
             {error
               ? "Could not reach the cluster."
-              : `${nodes.length} node${nodes.length === 1 ? "" : "s"} provisioned · ${readyCount} ready · hover a node for details`}
+              : `${nodes.length} node${nodes.length === 1 ? "" : "s"} provisioned · ${readyCount} ready · ${pods.length} pod${pods.length === 1 ? "" : "s"} · hover a pod for details`}
           </p>
         </header>
 
@@ -50,7 +51,7 @@ export default async function NodesCanvas() {
             <p className="mt-1 font-mono text-xs text-rose-300/80">{error}</p>
           </div>
         ) : (
-          <NodeCanvas nodes={nodes} />
+          <NodeCanvas nodes={nodes} pods={pods} />
         )}
       </div>
     </div>
