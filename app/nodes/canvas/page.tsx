@@ -1,9 +1,9 @@
 import { connection } from "next/server";
 import Link from "next/link";
-import { ListNodes, type NodeInfo } from "../lib/k8s";
-import NodeTable from "../components/NodeTable";
+import { ListNodes, type NodeInfo } from "../../lib/k8s";
+import NodeCanvas from "../../components/NodeCanvas";
 
-export default async function Nodes() {
+export default async function NodesCanvas() {
   // See app/page.tsx: force per-request rendering so ListNodes() runs inside the
   // pod (with in-cluster auth) instead of being prerendered at build time.
   await connection();
@@ -28,25 +28,19 @@ export default async function Nodes() {
               ⎈
             </span>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Kubernetes Nodes
+              Nodes Canvas
             </h1>
             <Link
-              href="/nodes/canvas"
+              href="/nodes"
               className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
             >
-              Canvas →
-            </Link>
-            <Link
-              href="/"
-              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
-            >
-              ← Pods
+              ← Table
             </Link>
           </div>
           <p className="text-sm text-zinc-400">
             {error
               ? "Could not reach the cluster."
-              : `${nodes.length} node${nodes.length === 1 ? "" : "s"} provisioned · ${readyCount} ready`}
+              : `${nodes.length} node${nodes.length === 1 ? "" : "s"} provisioned · ${readyCount} ready · hover a node for details`}
           </p>
         </header>
 
@@ -56,7 +50,7 @@ export default async function Nodes() {
             <p className="mt-1 font-mono text-xs text-rose-300/80">{error}</p>
           </div>
         ) : (
-          <NodeTable nodes={nodes} />
+          <NodeCanvas nodes={nodes} />
         )}
       </div>
     </div>
