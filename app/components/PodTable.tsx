@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { fetchPodLogs, fetchPodEvents } from "../lib/actions";
 import type { PodInfo, EventInfo } from "../lib/k8s";
-
-// How often auto-refresh re-runs the server component to refetch pods.
-const REFRESH_INTERVAL_MS = 10_000;
+import AutoRefreshToggle from "./AutoRefreshToggle";
 
 function phaseStyles(phase: string): string {
   switch (phase) {
@@ -43,18 +40,6 @@ export default function PodTable({
   pods: PodInfo[];
   namespaces: string[];
 }) {
-  const router = useRouter();
-  const [autoRefresh, setAutoRefresh] = useState(false);
-
-  // When enabled, periodically re-run the server component (page.tsx) so the
-  // pod list is refetched. router.refresh() preserves this component's state,
-  // so any open logs/events dialog and the filters stay put across refreshes.
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(() => router.refresh(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [autoRefresh, router]);
-
   const [namespace, setNamespace] = useState<string>("");
   const [podFilter, setPodFilter] = useState<string>("");
   const query = podFilter.trim().toLowerCase();
@@ -170,23 +155,7 @@ export default function PodTable({
         <span className="text-xs text-zinc-500">
           {visiblePods.length} pod{visiblePods.length === 1 ? "" : "s"}
         </span>
-        <button
-          onClick={() => setAutoRefresh((on) => !on)}
-          aria-pressed={autoRefresh}
-          title={`Auto-refresh every ${REFRESH_INTERVAL_MS / 1000}s`}
-          className={`ml-auto inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
-            autoRefresh
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-              : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              autoRefresh ? "animate-pulse bg-emerald-400" : "bg-zinc-500"
-            }`}
-          />
-          Auto-refresh {autoRefresh ? "on" : "off"}
-        </button>
+        <AutoRefreshToggle className="ml-auto" />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 shadow-2xl shadow-black/40 backdrop-blur">

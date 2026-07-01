@@ -8,6 +8,7 @@ import {
 } from "../lib/k8s";
 import HealthPieChart from "../components/HealthPieChart";
 import LatencyCard from "../components/LatencyCard";
+import AutoRefreshToggle from "../components/AutoRefreshToggle";
 
 // A pod counts as healthy when it is up and all of its containers are ready,
 // or when it has run to completion. Anything else — CrashLoopBackOff, not
@@ -58,9 +59,10 @@ export default async function Dashboard() {
               ⎈
             </span>
             <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <AutoRefreshToggle className="ml-auto" />
             <Link
               href="/"
-              className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
             >
               ← Pods
             </Link>
