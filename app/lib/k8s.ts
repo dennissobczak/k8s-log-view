@@ -178,6 +178,95 @@ export async function ListNamespaces(): Promise<string[]> {
         .sort((a, b) => a.localeCompare(b));
 }
 
+export interface NodeInfo {
+    name: string;
+    /** Derived from the node's `Ready` condition: "Ready" | "NotReady" | "Unknown". */
+    status: string;
+    /** `SchedulingDisabled` when the node is cordoned (spec.unschedulable). */
+    schedulable: boolean;
+    /** Roles parsed from `node-role.kubernetes.io/<role>` labels; "<none>" if none. */
+    roles: string[];
+    /** kubelet version, e.g. "v1.30.2". */
+    version: string;
+    /** OS image reported by the kubelet, e.g. "Ubuntu 22.04.4 LTS". */
+    osImage: string;
+    /** First InternalIP address, or "—". */
+    internalIP: string;
+    /** Total CPU capacity (cores), e.g. "4". */
+    cpu: string;
+    /** Total memory capacity, human-readable, e.g. "15.6 GiB". */
+    memory: string;
+    /** creationTimestamp as ISO string, or null. */
+    createdAt: string | null;
+}
+
+/**
+ * Format a Kubernetes memory quantity (e.g. "16331764Ki") as human-readable
+ * binary units. Falls back to the raw string for anything we can't parse.
+ */
+function formatMemory(quantity: string | undefined): string {
+    if (!quantity) return "—";
+    const match = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei)?$/.exec(quantity);
+    if (!match) return quantity;
+    const value = Number(match[1]);
+    const unitToKi: Record<string, number> = {
+        Ki: 1,
+        Mi: 1024,
+        Gi: 1024 ** 2,
+        Ti: 1024 ** 3,
+        Pi: 1024 ** 4,
+        Ei: 1024 ** 5,
+    };
+    // Bytes when there's no binary suffix; normalize everything to GiB.
+    const ki = match[2] ? value * unitToKi[match[2]] : value / 1024;
+    const gib = ki / (1024 * 1024);
+    return `${gib.toFixed(1)} GiB`;
+}
+
+export async function ListNodes(): Promise<NodeInfo[]> {
+    const k8sApi = getCoreV1Api();
+
+    const res = await k8sApi.listNode();
+
+    return res.items
+        .map((node) => {
+            const labels = node.metadata?.labels ?? {};
+            const roles = Object.keys(labels)
+                .filter((key) => key.startsWith("node-role.kubernetes.io/"))
+                .map((key) => key.slice("node-role.kubernetes.io/".length))
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b));
+
+            const ready = node.status?.conditions?.find((c) => c.type === "Ready");
+            const status =
+                ready?.status === "True"
+                    ? "Ready"
+                    : ready?.status === "False"
+                        ? "NotReady"
+                        : "Unknown";
+
+            const internalIP =
+                node.status?.addresses?.find((a) => a.type === "InternalIP")
+                    ?.address ?? "—";
+
+            return {
+                name: node.metadata?.name ?? "<unknown>",
+                status,
+                schedulable: !node.spec?.unschedulable,
+                roles: roles.length > 0 ? roles : ["<none>"],
+                version: node.status?.nodeInfo?.kubeletVersion ?? "—",
+                osImage: node.status?.nodeInfo?.osImage ?? "—",
+                internalIP,
+                cpu: node.status?.capacity?.cpu ?? "—",
+                memory: formatMemory(node.status?.capacity?.memory),
+                createdAt: node.metadata?.creationTimestamp
+                    ? new Date(node.metadata.creationTimestamp).toISOString()
+                    : null,
+            };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export interface ClusterLatency {
     /** API server Service name, e.g. "kubernetes.default.svc" — for display. */
     service: string;

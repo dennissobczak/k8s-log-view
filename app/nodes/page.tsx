@@ -1,26 +1,23 @@
 import { connection } from "next/server";
 import Link from "next/link";
-import { ListPods, ListNamespaces, type PodInfo } from "./lib/k8s";
-import PodTable from "./components/PodTable";
+import { ListNodes, type NodeInfo } from "../lib/k8s";
+import NodeTable from "../components/NodeTable";
 
-export default async function Home() {
-  // Wait for a real request before touching the cluster. Without this the page
-  // is statically prerendered at build time (in Docker/CI, where there is no
-  // cluster), baking the "Could not reach the cluster" error into the HTML that
-  // is then served forever — the in-cluster code never re-runs at request time.
+export default async function Nodes() {
+  // See app/page.tsx: force per-request rendering so ListNodes() runs inside the
+  // pod (with in-cluster auth) instead of being prerendered at build time.
   await connection();
 
-  let pods: PodInfo[] = [];
-  let namespaces: string[] = [];
+  let nodes: NodeInfo[] = [];
   let error: string | null = null;
 
   try {
-    [pods, namespaces] = await Promise.all([ListPods(), ListNamespaces()]);
+    nodes = await ListNodes();
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
-  const runningCount = pods.filter((p) => p.phase === "Running").length;
+  const readyCount = nodes.filter((n) => n.status === "Ready").length;
 
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100">
@@ -31,35 +28,29 @@ export default async function Home() {
               ⎈
             </span>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Kubernetes Pods
+              Kubernetes Nodes
             </h1>
             <Link
-              href="/nodes"
+              href="/"
               className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
             >
-              Nodes →
-            </Link>
-            <Link
-              href="/dashboard"
-              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
-            >
-              Dashboard →
+              ← Pods
             </Link>
           </div>
           <p className="text-sm text-zinc-400">
             {error
               ? "Could not reach the cluster."
-              : `${pods.length} pod${pods.length === 1 ? "" : "s"} across all namespaces · ${runningCount} running · click a row to view logs`}
+              : `${nodes.length} node${nodes.length === 1 ? "" : "s"} provisioned · ${readyCount} ready`}
           </p>
         </header>
 
         {error ? (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-sm text-rose-300">
-            <p className="font-medium text-rose-200">Failed to list pods</p>
+            <p className="font-medium text-rose-200">Failed to list nodes</p>
             <p className="mt-1 font-mono text-xs text-rose-300/80">{error}</p>
           </div>
         ) : (
-          <PodTable pods={pods} namespaces={namespaces} />
+          <NodeTable nodes={nodes} />
         )}
       </div>
     </div>
