@@ -45,6 +45,12 @@ export default async function Home() {
             >
               Dashboard →
             </Link>
+            <Link
+              href="/affinity"
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+            >
+              Affinity →
+            </Link>
           </div>
           <p className="text-sm text-zinc-400">
             {error
