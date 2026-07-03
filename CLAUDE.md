@@ -80,7 +80,11 @@ app/
   page.tsx                Server Component — home page (fetch + render)
   layout.tsx              Root layout (fonts, metadata, globals.css)
   globals.css             Tailwind v4 + theme tokens
+  affinity/page.tsx       Server Component shell — hosts the Affinity Builder
   components/PodTable.tsx  Client Component — table, logs dialog, events dialog
+  components/AffinityBuilder.tsx  Client Component — graphical affinity/anti-
+                          affinity editor; serializes rules to YAML (no cluster
+                          access, no server actions)
   lib/
     k8s.ts                Data-access layer (@kubernetes/client-node)
     actions.ts            Server Actions (fetchPodLogs, fetchPodEvents)
