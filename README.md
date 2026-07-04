@@ -9,6 +9,8 @@ It is comparable to what we see when executing the commands:
 * ```kubectl -- events for pod/<podname> -n <namespace>``` that show the events that occured during the pod init and start up phases
 
 ![pod list](klv_dash_pods.png "K8s-Log-View - Pod-List")
+![workload on node](klv_workload_on_nodes.png "K8s-Log-View - Nodes Workload")
+![affinity builder](klv_affinity_builder.png "K8s-Log-View - Affinity Builder")
 ![health chart](klv_dash_health.png "K8s-Log-View - Health-Dashboard")
 
 ## What is the Use Case for K8s LogView?
