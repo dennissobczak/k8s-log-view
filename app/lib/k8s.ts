@@ -111,9 +111,9 @@ export async function InitK8sClient() {
         console.log(res.items.entries.length);
     });
     
-    k8sApi.listNamespace().then((res) => {
+//    k8sApi.listNamespace().then((res) => {
         //console.log(typeof res);
-    });
+//    });
 }
 
 export interface PodInfo {
